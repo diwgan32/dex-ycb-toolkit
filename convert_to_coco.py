@@ -105,6 +105,17 @@ def make_dirs(path):
   except Exception as e:
     pass
 
+def get_bbox(uv):
+  x = min(uv[:, 0]) - 10
+  y = min(uv[:, 1]) - 10
+
+  x_max = min(max(uv[:, 0]) + 10, 256)
+  y_max = min(max(uv[:, 1]) + 10, 256)
+
+  return [
+      float(max(0, x)), float(max(0, y)), float(x_max - x), float(y_max - y)
+  ]
+
 def crop_and_center(imgInOrg, gtIn):
   shape = imgInOrg.shape
   box_size = min(imgInOrg.shape[0], imgInOrg.shape[1])
@@ -134,11 +145,37 @@ def crop_and_center(imgInOrg, gtIn):
   y_min_v *= float(256)/480
   return new_img, x_min_v, y_min_v
 
+def left_or_right(joint_2d, joint_3d, side):
+  joint_2d_aug = np.zeros((42, 2))
+  joint_3d_aug = np.zeros((42, 3))
+  valid = np.zeros(42)
+  if (side == "right"):
+    joint_2d_aug[0:21, :] = joint_2d
+    joint_3d_aug[0:21, :] = joint_3d
+    valid[:21] = np.ones(21)
+  if (side == "left"):
+    joint_2d_aug[21:42, :] = joint_2d
+    joint_3d_aug[21:42, :] = joint_3d
+    valid[21:42] = np.ones(21)
+  return joint_2d_aug, joint_3d_aug, valid
+
 def main():
   name = 's0_train'
   dataset = get_dataset(name)
   count = 0
+  output = {
+    "images": [],
+    "annotations": [],
+    "categories": [{
+      'supercategory': 'person',
+      'id': 1,
+      'name': 'person'
+    }]
+  }
+  split = "training"
   for idx in range(len(dataset)):
+    if (count > 10):
+      break
     sample = dataset[idx]
     label = np.load(sample['label_file'])
     fx = sample['intrinsics']['fx']
@@ -161,5 +198,37 @@ def main():
     make_dirs(output_path)
     cv2.imwrite(output_path, processed_img)
     joint_3d = reproject_to_3d(joint_2d, K, joint_3d[:, 2])
+
+    joint_2d_aug, joint_3d_aug, joint_valid = left_or_right(joint_2d, joint_3d, sample["mano_side"])
+
+    output["images"].append({
+      "id": count,
+      "width": 256,
+      "height": 256,
+      "file_name": output_path,
+      "camera_param": {
+          "focal": [float(K[0][0]), float(K[1][1])],
+          "princpt": [float(K[0][2]), float(K[1][2])]
+      }
+    })
+
+    output["annotations"].append({
+      "id": count,
+      "image_id": count,
+      "category_id": 1,
+      "is_crowd": 0,
+      "joint_img": joint_2d_aug.tolist(),
+      "joint_valid": joint_valid,
+      "hand_type": sample["mano_side"],
+      "joint_cam": (joint_3d_aug * 1000).tolist(),
+      "bbox": get_bbox(joint_2d)
+    })
+
+    count += 1
+
+  f = open("dex_ycb"+split+".json", "w")
+  json.dump(output, f)
+  f.close()
+
 if __name__ == '__main__':
   main()
