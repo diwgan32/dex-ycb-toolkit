@@ -12,7 +12,7 @@ setup(
         'numpy',
         'matplotlib',
         'open3d',
-        'opencv-python',
+        'opencv-python==4.2.0.34',
         'pycocotools',
         'pyglet',
         'pyrender',

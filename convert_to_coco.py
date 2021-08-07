@@ -87,14 +87,13 @@ def create_scene(sample, obj_file):
 def main():
   name = 's0_train'
   dataset = get_dataset(name)
-
-  for idx in len(dataset):
-      sample = dataset[idx]
-      
-      label = np.load(sample['label_file'])
-      
-      print(label["joint_3d"])
-      input("? ")
-
+  count = 0
+  for idx in range(len(dataset)):
+    sample = dataset[idx]
+    label = np.load(sample['label_file'])
+    joint_3d = label["joint_3d"]
+    if (not np.all(joint_3d[0] == np.ones(3) * -1)):
+      count += 1
+  print(f"Total count: {count}")
 if __name__ == '__main__':
   main()
