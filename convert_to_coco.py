@@ -83,6 +83,49 @@ def create_scene(sample, obj_file):
 
   return scene
 
+def reproject_to_3d(im_coords, K, z):
+  im_coords = np.stack([im_coords[:,0], im_coords[:,1]],axis=1)
+  im_coords = np.hstack((im_coords, np.ones((im_coords.shape[0],1))))
+  projected = np.dot(np.linalg.inv(K), im_coords.T).T
+  projected[:, 0] *= z
+  projected[:, 1] *= z
+  projected[:, 2] *= z
+  return projected
+
+def make_dirs(path):
+  try:
+    base = os.path.dirname(path)
+    os.makedirs(base)
+  except Exception as e:
+    pass
+
+def crop_and_center(imgInOrg, gtIn):
+  shape = imgInOrg.shape
+  box_size = min(imgInOrg.shape[0], imgInOrg.shape[1])
+  center = get_center(gtIn)
+  x_min_v = center[0] - box_size/2
+  y_min_v = center[1] - box_size/2
+  x_max_v = center[0] + box_size/2
+  y_max_v = center[1] + box_size/2
+  
+  x_min_n = int(max(0, -x_min_v))
+  y_min_n = int(max(0, -y_min_v))
+
+  x_min_o = int(max(0, x_min_v))
+  y_min_o = int(max(0, y_min_v))
+  x_max_o = int(min(imgInOrg.shape[1], x_max_v))
+  y_max_o = int(min(imgInOrg.shape[0], y_max_v))
+
+  w = int(x_max_o - x_min_o)
+  h = int(y_max_o - y_min_o)
+  
+  new_img = np.zeros((box_size, box_size, 3))
+  new_img[y_min_n:y_min_n+h, x_min_n:x_min_n+w] = \
+          imgInOrg[y_min_o:y_max_o, x_min_o:x_max_o]
+  new_img = cv2.resize(new_img, (256, 256))
+  x_min_v *= float(256)/480
+  y_min_v *= float(256)/480
+  return new_img, x_min_v, y_min_v
 
 def main():
   name = 's0_train'
@@ -91,9 +134,28 @@ def main():
   for idx in range(len(dataset)):
     sample = dataset[idx]
     label = np.load(sample['label_file'])
+    fx = sample['intrinsics']['fx']
+    fy = sample['intrinsics']['fy']
+    cx = sample['intrinsics']['ppx']
+    cy = sample['intrinsics']['ppy']
+
+    K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
     joint_3d = label["joint_3d"]
+    joint_2d = label["joint_2d"]
+
     if (not np.all(joint_3d[0] == np.ones(3) * -1)):
-      count += 1
+      continue
+    
+   
+    img = cv2.imread(sample["color_file"])
+    processed_img, x_offset, y_offset = crop_and_center(img, joint_2d)
+    joint_2d[:, 0] -= x_offset
+    joint_2d[:, 1] -= y_offset
+    output_path = sample["color_file"].replace("DexYCB", "DexYCBOutput")
+    make_dirs(output_path)
+    cv2.imwrite(output_path, processed_img)
+    joint_3d = reproject_to_3d(joint_2d, K, joint_3d[:, 2])
+    input("? ")
   print(f"Total count: {count}")
 if __name__ == '__main__':
   main()
