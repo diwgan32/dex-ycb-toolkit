@@ -4,6 +4,7 @@
 
 """Example of visualizing object and hand pose of one image sample."""
 
+import os
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
@@ -83,6 +84,11 @@ def create_scene(sample, obj_file):
 
   return scene
 
+def get_center(gtIn):
+  x = gtIn[0, 0]
+  y = gtIn[0, 1]
+  return [x, y]
+
 def reproject_to_3d(im_coords, K, z):
   im_coords = np.stack([im_coords[:,0], im_coords[:,1]],axis=1)
   im_coords = np.hstack((im_coords, np.ones((im_coords.shape[0],1))))
@@ -103,6 +109,7 @@ def crop_and_center(imgInOrg, gtIn):
   shape = imgInOrg.shape
   box_size = min(imgInOrg.shape[0], imgInOrg.shape[1])
   center = get_center(gtIn)
+  print(center, box_size)
   x_min_v = center[0] - box_size/2
   y_min_v = center[1] - box_size/2
   x_max_v = center[0] + box_size/2
@@ -140,13 +147,12 @@ def main():
     cy = sample['intrinsics']['ppy']
 
     K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
-    joint_3d = label["joint_3d"]
-    joint_2d = label["joint_2d"]
+    joint_3d = label["joint_3d"][0]
+    joint_2d = label["joint_2d"][0]
 
-    if (not np.all(joint_3d[0] == np.ones(3) * -1)):
+    if (joint_3d[0][0] == -1 and joint_3d[0][1] == -1 and joint_3d[0][2] == -1):
       continue
     
-   
     img = cv2.imread(sample["color_file"])
     processed_img, x_offset, y_offset = crop_and_center(img, joint_2d)
     joint_2d[:, 0] -= x_offset
@@ -155,7 +161,5 @@ def main():
     make_dirs(output_path)
     cv2.imwrite(output_path, processed_img)
     joint_3d = reproject_to_3d(joint_2d, K, joint_3d[:, 2])
-    input("? ")
-  print(f"Total count: {count}")
 if __name__ == '__main__':
   main()
