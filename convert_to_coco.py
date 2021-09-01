@@ -8,7 +8,7 @@ import os
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-
+import json
 
 from dex_ycb_toolkit.factory import get_dataset
 
@@ -120,7 +120,6 @@ def crop_and_center(imgInOrg, gtIn):
   shape = imgInOrg.shape
   box_size = min(imgInOrg.shape[0], imgInOrg.shape[1])
   center = get_center(gtIn)
-  print(center, box_size)
   x_min_v = center[0] - box_size/2
   y_min_v = center[1] - box_size/2
   x_max_v = center[0] + box_size/2
@@ -160,7 +159,7 @@ def left_or_right(joint_2d, joint_3d, side):
   return joint_2d_aug, joint_3d_aug, valid
 
 def main():
-  name = 's0_train'
+  name = 's0_test'
   dataset = get_dataset(name)
   count = 0
   output = {
@@ -172,10 +171,9 @@ def main():
       'name': 'person'
     }]
   }
-  split = "training"
+  split = "evaluation"
+  num_items = len(dataset)
   for idx in range(len(dataset)):
-    if (count > 10):
-      break
     sample = dataset[idx]
     label = np.load(sample['label_file'])
     fx = sample['intrinsics']['fx']
@@ -188,19 +186,24 @@ def main():
     joint_2d = label["joint_2d"][0]
 
     if (joint_3d[0][0] == -1 and joint_3d[0][1] == -1 and joint_3d[0][2] == -1):
+      num_items -= 1
       continue
     
+    center = get_center(joint_2d)
+    if (center[0] < 0 or center[0] > 640 or center[1] < 0 or center[1] > 480):
+      num_items -= 1
+      continue
     img = cv2.imread(sample["color_file"])
     processed_img, x_offset, y_offset = crop_and_center(img, joint_2d)
+    joint_2d *= (float(256)/480)
     joint_2d[:, 0] -= x_offset
     joint_2d[:, 1] -= y_offset
-    output_path = sample["color_file"].replace("DexYCB", "DexYCBOutput")
+    output_path = sample["color_file"].replace("DexYCB", "DexYCBEvalOutput")
     make_dirs(output_path)
     cv2.imwrite(output_path, processed_img)
     joint_3d = reproject_to_3d(joint_2d, K, joint_3d[:, 2])
-
     joint_2d_aug, joint_3d_aug, joint_valid = left_or_right(joint_2d, joint_3d, sample["mano_side"])
-
+    #print(joint_3d)
     output["images"].append({
       "id": count,
       "width": 256,
@@ -218,15 +221,17 @@ def main():
       "category_id": 1,
       "is_crowd": 0,
       "joint_img": joint_2d_aug.tolist(),
-      "joint_valid": joint_valid,
+      "joint_valid": joint_valid.tolist(),
       "hand_type": sample["mano_side"],
       "joint_cam": (joint_3d_aug * 1000).tolist(),
       "bbox": get_bbox(joint_2d)
     })
 
     count += 1
-
-  f = open("dex_ycb"+split+".json", "w")
+    if (count % 100 == 0):
+      percent = 100 * (float(count)/num_items)
+      print("Idx: " + str(count) + ", percent: " + str(round(percent, 2)) + "%")
+  f = open("dex_"+split+".json", "w")
   json.dump(output, f)
   f.close()
 
