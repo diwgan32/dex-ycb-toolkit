@@ -109,8 +109,8 @@ def get_bbox(uv):
   x = min(uv[:, 0]) - 10
   y = min(uv[:, 1]) - 10
 
-  x_max = min(max(uv[:, 0]) + 10, 256)
-  y_max = min(max(uv[:, 1]) + 10, 256)
+  x_max = min(max(uv[:, 0]) + 10, 255)
+  y_max = min(max(uv[:, 1]) + 10, 255)
 
   return [
       float(max(0, x)), float(max(0, y)), float(x_max - x), float(y_max - y)
@@ -159,7 +159,7 @@ def left_or_right(joint_2d, joint_3d, side):
   return joint_2d_aug, joint_3d_aug, valid
 
 def main():
-  name = 's0_test'
+  name = 's0_train'
   dataset = get_dataset(name)
   count = 0
   output = {
@@ -171,7 +171,7 @@ def main():
       'name': 'person'
     }]
   }
-  split = "evaluation"
+  split = "training"
   num_items = len(dataset)
   for idx in range(len(dataset)):
     sample = dataset[idx]
@@ -198,7 +198,7 @@ def main():
     joint_2d *= (float(256)/480)
     joint_2d[:, 0] -= x_offset
     joint_2d[:, 1] -= y_offset
-    output_path = sample["color_file"].replace("DexYCB", "DexYCBEvalOutput")
+    output_path = sample["color_file"].replace("dex_raw", "DexYCBEvalOutput")
     make_dirs(output_path)
     cv2.imwrite(output_path, processed_img)
     joint_3d = reproject_to_3d(joint_2d, K, joint_3d[:, 2])
@@ -214,7 +214,8 @@ def main():
           "princpt": [float(K[0][2]), float(K[1][2])]
       }
     })
-
+    print(joint_3d_aug)
+    input(" ?")
     output["annotations"].append({
       "id": count,
       "image_id": count,
